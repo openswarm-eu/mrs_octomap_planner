@@ -1161,34 +1161,34 @@ void OctomapPlanner::timerMain([[maybe_unused]] const ros::TimerEvent& evt) {
 
       timer.checkpoint("calling trajectory generation");
 
-      // | --------------------- INGENIARIUS: start -------------------- |
-      // Build path msg and print reference
-      nav_msgs::Path get_path;
+      // // | --------------------- INGENIARIUS: start -------------------- |
+      // // Build path msg and print reference
+      // nav_msgs::Path get_path;
 
-      get_path.header.stamp = ros::Time::now();
-      get_path.header.frame_id = octree_frame_;
+      // get_path.header.stamp = ros::Time::now();
+      // get_path.header.frame_id = octree_frame_;
 
-      for (auto& p :srv_get_path.request.path.points) {
-        geometry_msgs::PoseStamped pose;
-        pose.header.stamp = ros::Time::now();         // Set timestamp for each pose
-        pose.header.frame_id = octree_frame_;         // Set frame ID for each pose
+      // for (auto& p :srv_get_path.request.path.points) {
+      //   geometry_msgs::PoseStamped pose;
+      //   pose.header.stamp = ros::Time::now();         // Set timestamp for each pose
+      //   pose.header.frame_id = octree_frame_;         // Set frame ID for each pose
 
-        // Assign position and orientation to the pose
-        pose.pose.position = p.position;
-        pose.pose.orientation.x = 0;
-        pose.pose.orientation.y = 0;
-        pose.pose.orientation.z = 0;
-        pose.pose.orientation.w = 1;
+      //   // Assign position and orientation to the pose
+      //   pose.pose.position = p.position;
+      //   pose.pose.orientation.x = 0;
+      //   pose.pose.orientation.y = 0;
+      //   pose.pose.orientation.z = 0;
+      //   pose.pose.orientation.w = 1;
 
-        // Add the pose to the path
-        get_path.poses.push_back(pose);
-        ROS_INFO("***[MrsOctomapPlanner]: Traj. generation: %.3f, %.3f, %.3f", p.position.x, p.position.y, p.position.z);
-      }
+      //   // Add the pose to the path
+      //   get_path.poses.push_back(pose);
+      //   ROS_INFO("***[MrsOctomapPlanner]: Traj. generation: %.3f, %.3f, %.3f", p.position.x, p.position.y, p.position.z);
+      // }
 
-      // Publish the path
-      pub_trajectory_.publish(get_path);
-      ROS_INFO("Published path with %lu poses.", get_path.poses.size());
-      // | --------------------- INGENIARIUS: end  -------------------- |
+      // // Publish the path
+      // pub_trajectory_.publish(get_path);
+      // ROS_INFO("Published path with %lu poses.", get_path.poses.size());
+      // // | --------------------- INGENIARIUS: end  -------------------- |
 
       {
         bool success = sc_get_trajectory_.call(srv_get_path);
@@ -1269,6 +1269,36 @@ void OctomapPlanner::timerMain([[maybe_unused]] const ros::TimerEvent& evt) {
       /*   ROS_INFO("[MrsOctomapPlanner]: Trajectory point %02d: [%.2f, %.2f, %.2f]", cb, point.position.x, point.position.y, point.position.z); */
       /*   cb++; */
       /* } */
+
+      // | --------------------- INGENIARIUS: start -------------------- |
+      // Build path msg and print reference
+      nav_msgs::Path get_path;
+
+      get_path.header.stamp = ros::Time::now();
+      get_path.header.frame_id = octree_frame_;
+
+      for (auto& p :srv_get_path.response.trajectory.points) {
+        geometry_msgs::PoseStamped pose;
+        pose.header.stamp = ros::Time::now();         // Set timestamp for each pose
+        pose.header.frame_id = octree_frame_;         // Set frame ID for each pose
+
+        // Assign position and orientation to the pose
+        pose.pose.position = p.position;
+        pose.pose.orientation.x = 0;
+        pose.pose.orientation.y = 0;
+        pose.pose.orientation.z = 0;
+        pose.pose.orientation.w = 1;
+
+        // Add the pose to the path
+        get_path.poses.push_back(pose);
+        ROS_INFO("***[MrsOctomapPlanner]: Traj. generation: %.3f, %.3f, %.3f", p.position.x, p.position.y, p.position.z);
+      }
+
+      // Publish the path
+      pub_trajectory_.publish(get_path);
+      ROS_INFO("Published path with %lu poses.", get_path.poses.size());
+      // | --------------------- INGENIARIUS: end  -------------------- |
+
 
       ROS_INFO("[MrsOctomapPlanner]: Calling trajectory service with timestamp = %.3f at time %.3f.",
                srv_trajectory_reference.request.trajectory.header.stamp.toSec(), ros::Time::now().toSec());
