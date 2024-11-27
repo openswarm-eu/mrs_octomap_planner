@@ -94,6 +94,7 @@ private:
   double _distance_penalty_;
   double _greedy_penalty_;
   double _timeout_threshold_;
+  int _replanning_counter_;
   double _time_for_trajectory_generator_;
   double _max_waypoint_distance_;
   double _min_altitude_;
@@ -307,6 +308,7 @@ void OctomapPlanner::onInit() {
   param_loader.loadParam("min_altitude", _min_altitude_);
   param_loader.loadParam("max_altitude", _max_altitude_);
   param_loader.loadParam("timeout_threshold", _timeout_threshold_);
+  param_loader.loadParam("replanning_counter", _replanning_counter_, 2);
   param_loader.loadParam("time_for_trajectory_generator", _time_for_trajectory_generator_);
   param_loader.loadParam("replan_after", _replan_after_);
   param_loader.loadParam("min_path_length", _min_path_length_);
@@ -872,7 +874,7 @@ void OctomapPlanner::timerMain([[maybe_unused]] const ros::TimerEvent& evt) {
         diagnostics_.idle = false;
       }
 
-      if (replanning_counter_ >= 2) {
+      if (replanning_counter_ >= _replanning_counter_) {
 
         ROS_ERROR("[MrsOctomapPlanner]: planning failed, the uav is stuck");
 
