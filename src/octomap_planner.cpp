@@ -50,6 +50,8 @@
 // | --------------------- INGENIARIUS: start -------------------- |
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <std_msgs/Float64.h>
 // | --------------------- INGENIARIUS: end   -------------------- |
 
 //}
@@ -170,9 +172,11 @@ private:
   mrs_lib::SubscribeHandler<octomap_msgs::Octomap>               sh_octomap_;
   mrs_lib::SubscribeHandler<mrs_msgs::ControlManagerDiagnostics> sh_control_manager_diag_;
   mrs_lib::SubscribeHandler<mrs_msgs::DynamicsConstraints>       sh_constraints_;
+  ros::Subscriber home_pose_sub_;
 
   // publishers
   ros::Publisher pub_diagnostics_;
+  ros::Publisher distance_pub_;
 
   // subscriber callbacks
   void callbackTrackerCmd(const mrs_msgs::TrackerCommand::ConstPtr msg);
@@ -273,6 +277,11 @@ private:
   // Global variable to track the pause state
   bool is_paused = true;
   ros::Publisher pub_trajectory_;
+  // Home distance tool
+  bool _astar_only_mode_ = false;
+  bool home_set_ = false;
+  geometry_msgs::Point home_position_;
+  void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
   // | --------------------- INGENIARIUS: end   -------------------- |
 };
 
@@ -429,6 +438,13 @@ void OctomapPlanner::onInit() {
   // | --------------------- INGENIARIUS: start -------------------- |
   pub_trajectory_= nh_.advertise<nav_msgs::Path>("path", 1);
   ROS_INFO("[MrsOctomapPlanner]: Ingeniarius version");
+
+  param_loader.loadParam("astar_only_mode", _astar_only_mode_, false);
+  // Subscribe to odometry topic
+  home_pose_sub_ = nh_.subscribe("/uav1/estimation_manager/odom_main", 10, &OctomapPlanner::odomCallback, this);
+
+  // Publisher for distance
+  distance_pub_ = nh_.advertise<std_msgs::Float64>("/uav1/imec/distance_euclidean_from_home", 10);
   // | --------------------- INGENIARIUS: end   -------------------- |
 }
 
@@ -776,6 +792,38 @@ bool OctomapPlanner::callbackSetPlanner([[maybe_unused]] mrs_msgs::String::Reque
 
 //}
 
+/* callbackHomePose() //{ */
+void OctomapPlanner::odomCallback([[maybe_unused]] const nav_msgs::Odometry::ConstPtr& msg) {
+
+  if (!is_initialized_) {
+    return;
+  }
+
+  if (!home_set_)
+  {
+      home_position_ = msg->pose.pose.position;
+      home_set_ = true;
+      ROS_INFO("Home position set: [%.2f, %.2f, %.2f]",
+                home_position_.x,
+                home_position_.y,
+                home_position_.z);
+      return;
+  }
+
+  double dx = msg->pose.pose.position.x - home_position_.x;
+  double dy = msg->pose.pose.position.y - home_position_.y;
+  double dz = msg->pose.pose.position.z - home_position_.z;
+
+  double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+  std_msgs::Float64 dist_msg;
+  dist_msg.data = distance;
+  distance_pub_.publish(dist_msg);
+
+}
+
+//}
+
 // | ------------------------- timers ------------------------- |
 
 /* timerMain() //{ */
@@ -971,6 +1019,32 @@ void OctomapPlanner::timerMain([[maybe_unused]] const ros::TimerEvent& evt) {
       }
 
       timer.checkpoint("after findPath()");
+
+      // | --------------------- INGENIARIUS: start -------------------- |
+      if (_astar_only_mode_) {
+        // Build a nav_msgs::Path directly from AstarPlanner results
+        nav_msgs::Path astar_path;
+        astar_path.header.stamp = ros::Time::now();
+        astar_path.header.frame_id = octree_frame_;
+
+        for (auto& p : waypoints.first) {
+          geometry_msgs::PoseStamped pose;
+          pose.header = astar_path.header;
+          pose.pose.position.x = p.x();
+          pose.pose.position.y = p.y();
+          pose.pose.position.z = p.z();
+          pose.pose.orientation.w = 1.0; // Neutral orientation
+          astar_path.poses.push_back(pose);
+        }
+
+        pub_trajectory_.publish(astar_path);
+        ROS_INFO("[MrsOctomapPlanner]: Published A* path with %lu poses.", astar_path.poses.size());
+
+        // Skip trajectory generation and move to idle
+        changeState(STATE_IDLE);
+        return;
+      }
+      // | --------------------- INGENIARIUS: end -------------------- |
 
       // path is complete
       if (waypoints.second) {
@@ -1408,7 +1482,7 @@ void OctomapPlanner::timerFutureCheck([[maybe_unused]] const ros::TimerEvent& ev
 
   //}
 
-  if (state_ == STATE_IDLE) {
+  if (state_ == STATE_IDLE or _astar_only_mode_) {
     return;
   }
 
